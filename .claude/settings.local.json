@@ -5,7 +5,14 @@
       "Bash(curl -s http://127.0.0.1:8000/static/login.html)",
       "Bash(curl -s http://127.0.0.1:8000/static/index.html)",
       "Bash(curl -s http://127.0.0.1:8000/static/i18n.js)",
-      "Bash(curl -s http://127.0.0.1:8000/static/app.js)"
+      "Bash(curl -s http://127.0.0.1:8000/static/app.js)",
+      "Bash(docker run *)",
+      "Bash(curl -s http://127.0.0.1:8000/api/health)",
+      "Bash(docker exec *)",
+      "Bash(pkill -f \"uvicorn app.main\")",
+      "Bash(say \"hello this is a test product\" -o /tmp/speech.aiff)",
+      "Bash(/Users/wt/.local/bin/ffmpeg -y -f lavfi -i color=c=blue:size=640x480:duration=2 -i /tmp/speech.aiff -c:v libx264 -c:a aac -shortest /tmp/speech_video.mp4)",
+      "Bash(docker build *)"
     ]
   }
 }

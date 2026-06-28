@@ -1,0 +1,16 @@
+# TikTok 电商卖家助手 MVP — Docker 依赖
+# 含 ffmpeg + openai-whisper（支持视频转写）
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+aiosqlite==0.20.0
+httpx==0.28.1
+python-multipart==0.0.18
+python-dotenv==1.0.1
+uuid6==2024.7.10
+json-repair==0.61.0
+ffmpeg-python==0.2.0
+openai-whisper>=20240930
