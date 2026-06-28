@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok 电商卖家助手</title>
+  <style>
+    /* ═══════════ 深色主题全局 ═══════════ */
+    :root {
+      --bg: #0f0f1a;
+      --card: #1a1a2e;
+      --card-hover: #222240;
+      --border: #2a2a4a;
+      --text: #e0e0f0;
+      --text-secondary: #8888aa;
+      --primary: #6c5ce7;
+      --primary-hover: #7d6ff0;
+      --accent: #00d2a0;
+      --danger: #ff6b6b;
+      --warning: #ffa502;
+      --radius: 12px;
+      --transition: 0.2s ease;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-image: radial-gradient(ellipse at top, #1a1a3e 0%, var(--bg) 70%);
+    }
+
+    /* ═══════════ 登录卡片 ═══════════ */
+    .auth-container {
+      width: 100%;
+      max-width: 420px;
+      padding: 20px;
+    }
+
+    .auth-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px 32px;
+      box-shadow: 0 8px 32px rgba(108, 92, 231, 0.1);
+    }
+
+    .app-logo {
+      text-align: center;
+      margin-bottom: 8px;
+      font-size: 40px;
+    }
+
+    .app-title {
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .app-subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 28px;
+    }
+
+    /* ═══════════ Tab 切换 ═══════════ */
+    .tab-switch {
+      display: flex;
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 4px;
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .tab-btn:hover:not(.active) {
+      color: var(--text);
+    }
+
+    /* ═══════════ 表单 ═══════════ */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      transition: var(--transition);
+      outline: none;
+    }
+
+    .form-group input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+    }
+
+    .form-group input::placeholder {
+      color: #555;
+    }
+
+    /* ═══════════ 按钮 ═══════════ */
+    .btn-primary {
+      width: 100%;
+      padding: 13px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      margin-top: 4px;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ═══════════ 消息 ═══════════ */
+    .message {
+      text-align: center;
+      font-size: 13px;
+      margin-top: 12px;
+      min-height: 20px;
+    }
+
+    .message.error { color: var(--danger); }
+    .message.success { color: var(--accent); }
+
+    /* ═══════════ 语言切换 ═══════════ */
+    .lang-switch-top {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+    }
+
+    .lang-switch-top button {
+      padding: 6px 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .lang-switch-top button:hover {
+      border-color: var(--primary);
+    }
+
+    /* ═══════════ 响应式 ═══════════ */
+    @media (max-width: 480px) {
+      .auth-card {
+        padding: 28px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 语言切换 -->
+  <div class="lang-switch-top">
+    <button id="langSwitchBtn" onclick="toggleLang()">ภาษาไทย</button>
+  </div>
+
+  <!-- 登录卡片 -->
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="app-logo">🛍️</div>
+      <div class="app-title" data-i18n="appTitle">TikTok 电商卖家助手</div>
+      <div class="app-subtitle" data-i18n="appSubtitle">AI 爆款短视频分析工具</div>
+
+      <!-- Tab 切换 -->
+      <div class="tab-switch">
+        <button class="tab-btn active" data-i18n="login" id="tabLogin" onclick="switchTab('login')">登录</button>
+        <button class="tab-btn" data-i18n="register" id="tabRegister" onclick="switchTab('register')">注册</button>
+      </div>
+
+      <!-- 登录表单 -->
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label data-i18n="username">用户名</label>
+          <input type="text" id="loginUsername" data-i18n="username" placeholder="用户名" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label data-i18n="password">密码</label>
+          <input type="password" id="loginPassword" data-i18n="password" placeholder="密码" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn-primary" data-i18n="loginBtn" id="loginSubmitBtn">登录</button>
+      </form>
+
+      <!-- 注册表单（初始隐藏） -->
+      <form id="registerForm" onsubmit="handleRegister(event)" style="display:none;">
+        <div class="form-group">
+          <label data-i18n="username">用户名</label>
+          <input type="text" id="regUsername" data-i18n="username" placeholder="用户名" required minlength="2" maxlength="50" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label data-i18n="password">密码</label>
+          <input type="password" id="regPassword" data-i18n="password" placeholder="密码" required minlength="4" maxlength="100" autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn-primary" data-i18n="registerBtn" id="registerSubmitBtn">注册</button>
+      </form>
+
+      <!-- 消息区域 -->
+      <div class="message" id="authMessage"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 脚本 ═══════════ -->
+  <script src="/static/i18n.js"></script>
+  <script>
+    // ── 状态 ──────────────────────────────────────────
+    let currentTab = 'login';
+
+    // ── Tab 切换 ──────────────────────────────────────
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+      document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+      document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+      document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+      document.getElementById('authMessage').textContent = '';
+      document.getElementById('authMessage').className = 'message';
+    }
+
+    // ── 显示消息 ──────────────────────────────────────
+    function showMessage(msg, type) {
+      const el = document.getElementById('authMessage');
+      el.textContent = msg;
+      el.className = 'message ' + type;
+    }
+
+    // ── 登录 ──────────────────────────────────────────
+    async function handleLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('loginUsername').value.trim(),
+            password: document.getElementById('loginPassword').value
+          })
+        });
+        const data = await r.json();
+
+        if (data.success) {
+          // 保存 token 并跳转主页
+          localStorage.setItem('auth_token', data.token);
+          localStorage.setItem('username', data.username);
+          window.location.href = '/static/index.html';
+        } else {
+          showMessage(data.message || t('errLogin'), 'error');
+        }
+      } catch (err) {
+        showMessage(t('errNetwork'), 'error');
+      }
+      btn.disabled = false;
+      btn.textContent = t('loginBtn');
+    }
+
+    // ── 注册 ──────────────────────────────────────────
+    async function handleRegister(e) {
+      e.preventDefault();
+      const btn = document.getElementById('registerSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      const username = document.getElementById('regUsername').value.trim();
+      const password = document.getElementById('regPassword').value;
+
+      if (username.length < 2) {
+        showMessage('用户名至少 2 个字符', 'error');
+        btn.disabled = false;
+        btn.textContent = t('registerBtn');
+        return;
+      }
+
+      try {
+        const r = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await r.json();
+
+        if (data.success) {
+          showMessage(data.message, 'success');
+          // 自动切换到登录 Tab
+          setTimeout(() => switchTab('login'), 1000);
+        } else {
+          showMessage(data.message || t('errRegister'), 'error');
+        }
+      } catch (err) {
+        showMessage(t('errNetwork'), 'error');
+      }
+      btn.disabled = false;
+      btn.textContent = t('registerBtn');
+    }
+
+    // ── 初始化 ────────────────────────────────────────
+    // 检查是否已登录
+    if (localStorage.getItem('auth_token')) {
+      // 验证 token 有效性
+      fetch('/api/auth/me', {
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('auth_token') }
+      }).then(r => {
+        if (r.ok) window.location.href = '/static/index.html';
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# TikTok 电商卖家助手 MVP — Docker Compose
+version: "3.9"
+
+services:
+  app:
+    build: .
+    container_name: tiktok-seller-assistant
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # 持久化数据库和上传文件
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

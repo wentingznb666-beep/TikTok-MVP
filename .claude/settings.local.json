@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://127.0.0.1:8000/)",
+      "Bash(curl -s http://127.0.0.1:8000/static/login.html)",
+      "Bash(curl -s http://127.0.0.1:8000/static/index.html)",
+      "Bash(curl -s http://127.0.0.1:8000/static/i18n.js)",
+      "Bash(curl -s http://127.0.0.1:8000/static/app.js)"
+    ]
+  }
+}

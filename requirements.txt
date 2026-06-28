@@ -1,0 +1,32 @@
+# TikTok 电商卖家助手 MVP — 依赖清单
+# Python 3.10+
+
+# Web 框架
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# 认证
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# 数据库
+aiosqlite==0.20.0
+
+# HTTP 客户端（调用 DeepSeek API）
+httpx==0.28.1
+
+# 视频处理
+ffmpeg-python==0.2.0
+
+# 语音转文字
+openai-whisper==20240930
+
+# 文件上传处理
+python-multipart==0.0.18
+
+# 环境变量
+python-dotenv==1.0.1
+
+# 唯一 ID 生成
+uuid6==2024.7.10
