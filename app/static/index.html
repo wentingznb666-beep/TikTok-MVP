@@ -295,6 +295,40 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ═══════════ 进度条 ═══════════ */
+    .progress-container {
+      display: none;
+      padding: 24px 0 8px;
+      text-align: center;
+    }
+
+    .progress-bar-track {
+      width: 100%;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #fe2c55, #25f4ee);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+
+    .progress-stage {
+      font-size: 14px;
+      color: var(--text-secondary);
+      min-height: 20px;
+    }
+
+    .progress-stage.done {
+      color: var(--accent);
+    }
+
     /* ═══════════ 分析结果 ═══════════ */
     .result-container { display: none; }
 
@@ -353,17 +387,31 @@
     }
 
     .history-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       padding: 12px;
       border: 1px solid var(--border);
       border-radius: 8px;
       margin-bottom: 8px;
-      cursor: pointer;
       transition: var(--transition);
     }
 
     .history-item:hover {
       border-color: var(--primary);
       background: var(--card-hover);
+    }
+
+    .history-item input[type="checkbox"] {
+      flex-shrink: 0;
+      cursor: pointer;
+      width: 16px; height: 16px;
+    }
+
+    .history-item .item-body {
+      flex: 1;
+      min-width: 0;
+      cursor: pointer;
     }
 
     .history-item .preview {
@@ -389,6 +437,27 @@
     }
 
     .empty-state .icon { font-size: 40px; margin-bottom: 8px; }
+
+    /* ═══════════ 历史操作栏 ═══════════ */
+    .history-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 10px;
+    }
+
+    .select-all-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .select-all-wrap input { cursor: pointer; }
 
     /* ═══════════ 翻译区域 ═══════════ */
     .translate-panel { display: none; }
@@ -497,6 +566,17 @@
       <div class="layout-sidebar">
         <div class="card">
           <div class="card-title" data-i18n="historyTitle">📜 历史记录</div>
+          <!-- 历史操作栏 -->
+          <div class="history-toolbar" id="historyToolbar" style="display:none;">
+            <label class="select-all-wrap">
+              <input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll()">
+              <span data-i18n="selectAll">全选</span>
+            </label>
+            <div style="display:flex;gap:6px;">
+              <button class="btn-sm danger" data-i18n="deleteSelected" onclick="deleteSelectedHistory()">删除所选</button>
+              <button class="btn-sm danger" data-i18n="clearAllHistory" onclick="clearAllHistory()">全部清除</button>
+            </div>
+          </div>
           <div class="history-list" id="historyList">
             <div class="empty-state">
               <div class="icon">📭</div>
@@ -560,10 +640,18 @@
           <!-- 分析按钮 -->
           <button class="btn-primary-lg" data-i18n="analyzeBtn" id="analyzeBtn" onclick="doAnalyze()">🔍 开始分析</button>
 
-          <!-- 加载动画 -->
+          <!-- 加载动画（旧版降级） -->
           <div class="loading-spinner" id="loadingSpinner">
             <div class="spinner"></div>
             <div data-i18n="analyzing">分析中，请稍候...</div>
+          </div>
+
+          <!-- SSE 实时进度条 -->
+          <div class="progress-container" id="progressContainer">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+            <div class="progress-stage" id="progressStageText"></div>
           </div>
         </div>
 
@@ -583,7 +671,10 @@
 
         <textarea id="translateInput" data-i18n="translateInput" placeholder="输入要翻译的文本..." style="min-height:120px;"></textarea>
 
-        <button class="btn-primary-lg" data-i18n="translateBtn" id="translateBtn" onclick="doTranslate()" style="margin-top:12px;">🔄 翻译</button>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn-primary-lg" data-i18n="translateBtn" id="translateBtn" onclick="doTranslate()" style="flex:1;">🔄 翻译</button>
+          <button class="btn-sm" data-i18n="clearBtn" onclick="clearTranslate()">🗑️ 清除</button>
+        </div>
 
         <div class="loading-spinner" id="translateSpinner">
           <div class="spinner"></div>
@@ -592,13 +683,16 @@
 
         <div data-i18n="translateResult" style="font-weight:700; margin-top:20px; margin-bottom:8px; display:none;" id="translateResultLabel">翻译结果</div>
         <div class="translate-output" id="translateOutput" style="display:none;"></div>
-        <button class="btn-primary-lg" data-i18n="copyResult" id="copyResultBtn" onclick="copyTranslateResult()" style="display:none; margin-top:12px;">复制译文</button>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn-primary-lg" data-i18n="copyResult" id="copyResultBtn" onclick="copyTranslateResult()" style="display:none;flex:1;">复制译文</button>
+          <button class="btn-sm" data-i18n="speakBtn" id="speakBtn" onclick="speakTranslation()" style="display:none;">🔊 朗读</button>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- ═══════════ 脚本 ═══════════ -->
-  <script src="/static/i18n.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/i18n.js?v=7"></script>
+  <script src="/static/app.js?v=7"></script>
 </body>
 </html>

@@ -41,6 +41,12 @@ const I18N_DICT = {
     textPlaceholder: '在此粘贴带货视频的口播文案...',
     analyzeBtn: '🔍 开始分析',
     analyzing: '分析中，请稍候...',
+
+    // ── 进度条阶段 ──────────────────────────────
+    progressExtracting: '正在提取音频...',
+    progressTranscribing: '正在语音转文字...',
+    progressAnalyzing: 'AI 正在分析中...',
+    progressComplete: '✅ 分析完成',
     dragDrop: '或拖拽文件到此处',
     videoHint: '支持 mp4/mov，最大 100MB',
     imageHint: '支持 jpg/png/webp',
@@ -75,6 +81,11 @@ const I18N_DICT = {
     // ── 历史记录 ──────────────────────────────────
     historyTitle: '📜 历史记录',
     noHistory: '暂无分析记录',
+    selectAll: '全选',
+    deleteSelected: '删除所选',
+    clearAllHistory: '全部清除',
+    confirmClearAll: '确定要清空全部历史记录吗？此操作不可撤销。',
+    noSelection: '请先选择要删除的记录',
     viewDetail: '查看详情',
     created: '创建于',
 
@@ -84,9 +95,11 @@ const I18N_DICT = {
     th2zh: '泰 → 中',
     translateInput: '输入要翻译的文本...',
     translateBtn: '🔄 翻译',
+    clearBtn: '🗑️ 清除',
     translating: '翻译中...',
     translateResult: '翻译结果',
     copyResult: '复制译文',
+    speakBtn: '🔊 朗读',
 
     // ── 错误提示 ──────────────────────────────────
     errNetwork: '网络错误，请检查连接',
@@ -136,6 +149,12 @@ const I18N_DICT = {
     textPlaceholder: 'วางบทพูดวิดีโอของคุณที่นี่...',
     analyzeBtn: '🔍 เริ่มวิเคราะห์',
     analyzing: 'กำลังวิเคราะห์ กรุณารอ...',
+
+    // ── แถบความคืบหน้า ──────────────────────────
+    progressExtracting: 'กำลังแยกเสียง...',
+    progressTranscribing: 'กำลังแปลงเสียงเป็นข้อความ...',
+    progressAnalyzing: 'AI กำลังวิเคราะห์...',
+    progressComplete: '✅ วิเคราะห์เสร็จสิ้น',
     dragDrop: 'หรือลากไฟล์มาวางที่นี่',
     videoHint: 'รองรับ mp4/mov สูงสุด 100MB',
     imageHint: 'รองรับ jpg/png/webp',
@@ -168,6 +187,11 @@ const I18N_DICT = {
 
     historyTitle: '📜 ประวัติ',
     noHistory: 'ยังไม่มีประวัติการวิเคราะห์',
+    selectAll: 'เลือกทั้งหมด',
+    deleteSelected: 'ลบที่เลือก',
+    clearAllHistory: 'ลบทั้งหมด',
+    confirmClearAll: 'คุณแน่ใจหรือไม่ว่าต้องการลบประวัติทั้งหมด? การดำเนินการนี้ไม่สามารถยกเลิกได้',
+    noSelection: 'กรุณาเลือกรายการที่จะลบก่อน',
     viewDetail: 'ดูรายละเอียด',
     created: 'สร้างเมื่อ',
 
@@ -176,9 +200,11 @@ const I18N_DICT = {
     th2zh: 'ไทย → จีน',
     translateInput: 'ป้อนข้อความที่ต้องการแปล...',
     translateBtn: '🔄 แปลภาษา',
+    clearBtn: '🗑️ ล้าง',
     translating: 'กำลังแปล...',
     translateResult: 'ผลการแปล',
     copyResult: 'คัดลอกผลลัพธ์',
+    speakBtn: '🔊 อ่านออกเสียง',
 
     errNetwork: 'ข้อผิดพลาดเครือข่าย',
     errLogin: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
@@ -235,6 +261,9 @@ function updatePageLanguage() {
 
   // 动态更新页面标题
   document.title = t('appTitle');
+
+  // 触发语言切换事件，app.js 监听以重渲染分析结果
+  document.dispatchEvent(new CustomEvent('langChanged'));
 }
 
 // 页面加载时应用语言

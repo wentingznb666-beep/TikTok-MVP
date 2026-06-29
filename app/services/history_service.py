@@ -132,6 +132,48 @@ async def get_analysis_detail(user_id: int, record_id: str) -> Optional[HistoryD
     )
 
 
+async def delete_history_batch(user_id: int, record_ids: List[str]) -> int:
+    """
+    批量删除历史记录（仅限本人）
+
+    参数:
+        user_id: 用户 ID
+        record_ids: 要删除的 record_id 列表
+
+    返回:
+        实际删除条数
+    """
+    if not record_ids:
+        return 0
+    db = await get_db()
+    placeholders = ",".join("?" for _ in record_ids)
+    cursor = await db.execute(
+        f"DELETE FROM analyses WHERE user_id = ? AND record_id IN ({placeholders})",
+        (user_id, *record_ids),
+    )
+    await db.commit()
+    return cursor.rowcount
+
+
+async def delete_all_history(user_id: int) -> int:
+    """
+    清空用户全部历史记录
+
+    参数:
+        user_id: 用户 ID
+
+    返回:
+        删除条数
+    """
+    db = await get_db()
+    cursor = await db.execute(
+        "DELETE FROM analyses WHERE user_id = ?",
+        (user_id,),
+    )
+    await db.commit()
+    return cursor.rowcount
+
+
 async def get_shared_analysis(share_token: str) -> Optional[dict]:
     """
     通过分享 token 获取分析记录（无需登录）

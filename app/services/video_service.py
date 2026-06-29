@@ -26,6 +26,13 @@ def _get_whisper_model():
     return _whisper_model
 
 
+def preload_whisper():
+    """启动时预加载 Whisper 模型，避免首次请求等待"""
+    import asyncio
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, _get_whisper_model)
+
+
 def validate_video(filename: str, file_size: int) -> tuple[bool, str]:
     """
     校验上传的视频文件
@@ -104,9 +111,10 @@ async def extract_audio(video_path: str) -> str:
     audio_path = os.path.join(UPLOAD_DIR, "audio", audio_filename)
     os.makedirs(os.path.dirname(audio_path), exist_ok=True)
 
-    # 使用 ffmpeg 提取音频：16kHz 单声道 WAV
+    # 使用 ffmpeg 提取音频：16kHz 单声道 WAV，限 60 秒
     cmd = [
         "ffmpeg", "-i", video_path,
+        "-t", "60",           # 只取前 60 秒，TikTok 带货视频核心内容都在前半段
         "-vn",                # 不要视频流
         "-acodec", "pcm_s16le",  # 16-bit PCM
         "-ar", "16000",       # 16kHz 采样率
@@ -116,7 +124,7 @@ async def extract_audio(video_path: str) -> str:
     ]
 
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=120)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"音频提取失败: {e.stderr}")
 
@@ -129,14 +137,11 @@ async def transcribe_audio(audio_path: str, language: str = None) -> str:
 
     参数:
         audio_path: 音频文件路径
-        language: 语言代码（默认使用配置的 WHISPER_LANGUAGE）
+        language: 语言代码（None = Whisper 自动识别，可显式传 "zh"/"th"）
 
     返回:
         转写文本
     """
-    if language is None:
-        language = WHISPER_LANGUAGE
-
     model = _get_whisper_model()
 
     # 在异步环境中运行同步的 Whisper 转写
@@ -144,10 +149,84 @@ async def transcribe_audio(audio_path: str, language: str = None) -> str:
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         None,
-        lambda: model.transcribe(audio_path, language=language)
+        lambda: model.transcribe(audio_path, language=language)  # None → 自动识别
     )
 
     return result["text"].strip()
+
+
+# ═══════════════════════════════════════════════════════════════
+# 语言自动检测
+# ═══════════════════════════════════════════════════════════════
+
+def detect_text_language(text: str) -> str:
+    """
+    检测文字语种：含泰文 Unicode 字符 (0E00-0E7F) → "th"，否则 → "zh"
+
+    参数:
+        text: 待检测的文字
+
+    返回:
+        "th" 或 "zh"
+    """
+    if not text:
+        return "zh"
+    for char in text:
+        if '฀' <= char <= '๿':
+            return "th"
+    return "zh"
+
+
+async def detect_audio_language(audio_path: str, duration: int = 10) -> str:
+    """
+    截取音频前 N 秒，用 Whisper 自动识别语种（不传 language 参数）
+
+    参数:
+        audio_path: 完整音频文件路径
+        duration: 截取时长（秒），默认 10
+
+    返回:
+        "th" 或 "zh"，异常时回退到 config WHISPER_LANGUAGE
+    """
+    import asyncio
+    import tempfile
+    import subprocess
+
+    fd, snippet_path = tempfile.mkstemp(suffix='.wav')
+    os.close(fd)
+
+    try:
+        # 截取前 duration 秒
+        cmd = [
+            "ffmpeg", "-i", audio_path,
+            "-t", str(duration),
+            "-acodec", "pcm_s16le",
+            "-ar", "16000",
+            "-ac", "1",
+            "-y",
+            snippet_path,
+        ]
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60)
+
+        # Whisper 自动识别（不传 language）
+        model = _get_whisper_model()
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: model.transcribe(snippet_path)
+        )
+        snippet_text = result["text"].strip()
+        return detect_text_language(snippet_text)
+
+    except Exception:
+        from app.config import WHISPER_LANGUAGE
+        return WHISPER_LANGUAGE
+
+    finally:
+        try:
+            os.unlink(snippet_path)
+        except Exception:
+            pass
 
 
 async def process_video(video_content: bytes, filename: str) -> tuple[str, str, str]:

@@ -79,6 +79,7 @@ def _get_builtin_prompt(filename: str) -> str:
 def build_video_analysis_prompt(
     transcript: str,
     has_image: bool = False,
+    language: str = "zh",
 ) -> list:
     """
     构建视频分析的消息列表
@@ -86,15 +87,21 @@ def build_video_analysis_prompt(
     参数:
         transcript: 视频转写文本/用户粘贴的文案
         has_image: 是否附带商品图片
+        language: 语种 "zh"（中文）/ "th"（泰语）
 
     返回:
         DeepSeek API 格式的消息列表
     """
-    system_prompt = _load_prompt("video_analysis.txt")
-
-    user_content = f"以下是带货视频的口播文案，请按6维度进行分析：\n\n{transcript}"
-    if has_image:
-        user_content += "\n\n注意：用户同时上传了商品截图，请结合商品信息进行分析。"
+    if language == "th":
+        system_prompt = _load_prompt("video_analysis_th.txt")
+        user_content = f"นี่คือบทพูดของวิดีโอขายสินค้า กรุณาวิเคราะห์ตาม 6 มิติ:\n\n{transcript}"
+        if has_image:
+            user_content += "\n\nหมายเหตุ: ผู้ใช้ได้อัปโหลดภาพสินค้าด้วย กรุณาวิเคราะห์ร่วมกับข้อมูลในภาพ"
+    else:
+        system_prompt = _load_prompt("video_analysis.txt")
+        user_content = f"以下是带货视频的口播文案，请按6维度进行分析：\n\n{transcript}"
+        if has_image:
+            user_content += "\n\n注意：用户同时上传了商品截图，请结合商品信息进行分析。"
 
     return [
         {"role": "system", "content": system_prompt},

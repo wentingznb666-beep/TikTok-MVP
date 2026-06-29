@@ -16,6 +16,7 @@ let state = {
   imageFile: null,
   translateDirection: 'zh2th',
   currentDetail: null,        // 当前查看的分析详情
+  currentAnalysis: null,      // 缓存最近一次分析结果，用于语言切换时重渲染
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -51,6 +52,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // 语言切换时重渲染分析结果
+  document.addEventListener('langChanged', () => {
+    if (state.currentAnalysis) {
+      renderAnalysisResult(state.currentAnalysis);
+    }
+  });
+
   // 加载历史记录
   loadHistory();
 });
@@ -71,6 +79,13 @@ function switchMainTab(tab) {
 
   if (tab === 'analyze') {
     loadHistory();
+  } else {
+    // 切换到翻译 tab 时清除分析状态
+    document.getElementById('resultContainer').style.display = 'none';
+    document.getElementById('progressContainer').style.display = 'none';
+    document.getElementById('analyzeBtn').style.display = 'block';
+    document.getElementById('loadingSpinner').style.display = 'none';
+    state.currentAnalysis = null;
   }
 }
 
@@ -133,7 +148,7 @@ function clearFile(type) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 执行分析
+// 执行分析（SSE 流式，带实时进度条）
 // ═══════════════════════════════════════════════════════════════
 
 async function doAnalyze() {
@@ -153,7 +168,6 @@ async function doAnalyze() {
     formData.append('copy_text', copyText);
   }
   if (videoFile) {
-    // 客户端校验
     const maxSize = 100 * 1024 * 1024;
     if (videoFile.size > maxSize) {
       alert(t('errFileTooLarge'));
@@ -164,41 +178,114 @@ async function doAnalyze() {
   if (imageFile) {
     formData.append('image', imageFile);
   }
+  // 报告语种 = 当前页面语言
+  formData.append('lang', currentLang);
 
-  // UI 状态
+  // UI 状态：隐藏按钮和旧结果，显示进度条
   const btn = document.getElementById('analyzeBtn');
   btn.disabled = true;
   btn.style.display = 'none';
-  document.getElementById('loadingSpinner').style.display = 'block';
+  document.getElementById('loadingSpinner').style.display = 'none';
   document.getElementById('resultContainer').style.display = 'none';
+  document.getElementById('resultContainer').innerHTML = '';
+
+  const progressContainer = document.getElementById('progressContainer');
+  const progressFill = document.getElementById('progressBarFill');
+  const progressStage = document.getElementById('progressStageText');
+  progressContainer.style.display = 'block';
+  progressFill.style.width = '0%';
+  progressStage.className = 'progress-stage';
+  progressStage.textContent = '';
 
   try {
-    const r = await fetch('/api/analyze', {
+    const response = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + state.token },
       body: formData,
     });
 
-    const data = await r.json();
-
-    if (!r.ok || !data.success) {
-      alert(data.detail || data.message || t('errAnalysis'));
-      return;
+    if (!response.ok) {
+      // HTTP 错误（非流式返回时）
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.detail || `HTTP ${response.status}`);
     }
 
-    // 渲染结果
-    renderAnalysisResult(data.analysis);
-    state.currentDetail = data;
+    // 读取 SSE 流
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-    // 刷新历史
-    loadHistory();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE 事件以 \n\n 分隔
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop(); // 保留未完成的事件片段
+
+      for (const part of parts) {
+        if (!part.trim()) continue;
+
+        const lines = part.split('\n');
+        let eventType = 'message';
+        let dataStr = '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            dataStr = line.slice(6);
+          }
+        }
+
+        if (!dataStr) continue;
+
+        let data;
+        try {
+          data = JSON.parse(dataStr);
+        } catch (e) {
+          console.error('SSE JSON parse error:', e);
+          continue;
+        }
+
+        // 分发事件
+        if (eventType === 'progress') {
+          progressFill.style.width = data.percent + '%';
+          const msg = (currentLang === 'th' && data.message_th) ? data.message_th : data.message;
+          progressStage.textContent = msg;
+          progressStage.className = 'progress-stage';
+        } else if (eventType === 'complete') {
+          // 进度条到 100%
+          progressFill.style.width = '100%';
+          const doneMsg = currentLang === 'th' ? '✅ วิเคราะห์เสร็จสิ้น' : '✅ 分析完成';
+          progressStage.textContent = doneMsg;
+          progressStage.className = 'progress-stage done';
+
+          // 短暂停留后隐藏进度条，展示结果
+          setTimeout(() => {
+            progressContainer.style.display = 'none';
+          }, 800);
+
+          // 渲染结果
+          state.currentDetail = data;
+          renderAnalysisResult(data.analysis);
+
+          // 刷新历史
+          loadHistory();
+        } else if (eventType === 'error') {
+          progressContainer.style.display = 'none';
+          alert(data.message || t('errAnalysis'));
+        }
+      }
+    }
   } catch (err) {
+    progressContainer.style.display = 'none';
     alert(t('errNetwork') + ': ' + err.message);
   } finally {
     btn.disabled = false;
     btn.style.display = 'block';
-    document.getElementById('loadingSpinner').style.display = 'none';
   }
 }
 
@@ -207,6 +294,7 @@ async function doAnalyze() {
 // ═══════════════════════════════════════════════════════════════
 
 function renderAnalysisResult(analysis) {
+  state.currentAnalysis = analysis; // 缓存，语言切换时重渲染
   const container = document.getElementById('resultContainer');
   container.style.display = 'block';
 
@@ -220,9 +308,9 @@ function renderAnalysisResult(analysis) {
   // 维度 1：视频结构拆解
   if (analysis.structure) {
     html += buildDimSection(t('dim1'), t('dim1'), [
-      { label: t('hook'), value: analysis.structure.hook },
-      { label: t('middle'), value: analysis.structure.middle },
-      { label: t('cta'), value: analysis.structure.cta },
+      { label: t('hook'), value: safeStr(analysis.structure, 'hook') },
+      { label: t('middle'), value: safeStr(analysis.structure, 'middle') },
+      { label: t('cta'), value: safeStr(analysis.structure, 'cta') },
     ]);
   }
 
@@ -231,30 +319,36 @@ function renderAnalysisResult(analysis) {
     html += buildDimSection(t('dim2'), t('dim2'), [
       { label: t('highConversion'), value: listToHtml(analysis.copywriting.high_conversion_sentences) },
       { label: t('interactionQ'), value: listToHtml(analysis.copywriting.interaction_questions) },
-      { label: t('emotionCurve'), value: analysis.copywriting.emotion_curve },
+      { label: t('emotionCurve'), value: safeStr(analysis.copywriting, 'emotion_curve') },
     ]);
   }
 
   // 维度 3：受众与情绪
   if (analysis.audience) {
     html += buildDimSection(t('dim3'), t('dim3'), [
-      { label: t('persona'), value: analysis.audience.persona },
-      { label: t('emotionalResonance'), value: analysis.audience.emotional_resonance },
+      { label: t('persona'), value: safeStr(analysis.audience, 'persona') },
+      { label: t('emotionalResonance'), value: safeStr(analysis.audience, 'emotional_resonance') },
     ]);
   }
 
   // 维度 4：视听配合
   if (analysis.audio_visual) {
     html += buildDimSection(t('dim4'), t('dim4'), [
-      { label: t('matchLevel'), value: analysis.audio_visual.match_level },
-      { label: t('suggestions'), value: analysis.audio_visual.suggestions },
+      { label: t('matchLevel'), value: safeStr(analysis.audio_visual, 'match_level') },
+      { label: t('suggestions'), value: safeStr(analysis.audio_visual, 'suggestions') },
     ]);
   }
 
   // 维度 5：差异化亮点与避雷
   if (analysis.highlights) {
-    const strengthsHtml = (analysis.highlights.strengths || []).map(s => `<span class="tag good">✨ ${escapeHtml(s)}</span>`).join(' ');
-    const warningsHtml = (analysis.highlights.warnings || []).map(w => `<span class="tag warn">⚠️ ${escapeHtml(w)}</span>`).join(' ');
+    const strengthsHtml = (analysis.highlights.strengths || []).map(s => {
+      const txt = typeof s === 'string' ? s : (s && Object.values(s)[0]) || '';
+      return `<span class="tag good">✨ ${escapeHtml(String(txt))}</span>`;
+    }).join(' ');
+    const warningsHtml = (analysis.highlights.warnings || []).map(w => {
+      const txt = typeof w === 'string' ? w : (w && Object.values(w)[0]) || '';
+      return `<span class="tag warn">⚠️ ${escapeHtml(String(txt))}</span>`;
+    }).join(' ');
     html += buildDimSection(t('dim5'), t('dim5'), [
       { label: t('strengths'), value: strengthsHtml || '—' },
       { label: t('warnings'), value: warningsHtml || '—' },
@@ -263,11 +357,13 @@ function renderAnalysisResult(analysis) {
 
   // 维度 6：复用优化建议
   if (analysis.optimization) {
+    // 兼容 chinese_script (泰语prompt) 和 thai_script (中文prompt)
+    const foreignScript = analysis.optimization.thai_script || analysis.optimization.chinese_script || '';
     html += buildDimSection(t('dim6'), t('dim6'), [
-      { label: t('scriptFramework'), value: analysis.optimization.script_framework },
+      { label: t('scriptFramework'), value: safeStr(analysis.optimization, 'script_framework') },
       { label: t('revisions'), value: listToHtml(analysis.optimization.revisions) },
-      { label: t('categorySuggestions'), value: analysis.optimization.category_suggestions },
-      { label: t('thaiScript'), value: `<p style="background:rgba(0,210,160,0.08);padding:12px;border-radius:8px;border:1px solid var(--accent);white-space:pre-wrap;">${escapeHtml(analysis.optimization.thai_script || '')}</p>` },
+      { label: t('categorySuggestions'), value: safeStr(analysis.optimization, 'category_suggestions') },
+      { label: t('thaiScript'), value: `<p style="background:rgba(0,210,160,0.08);padding:12px;border-radius:8px;border:1px solid var(--accent);white-space:pre-wrap;">${escapeHtml(foreignScript)}</p>` },
     ]);
   }
 
@@ -287,9 +383,6 @@ function renderAnalysisResult(analysis) {
 
   container.innerHTML = html;
   container.scrollIntoView({ behavior: 'smooth' });
-
-  // 更新语言
-  updatePageLanguage();
 }
 
 function buildDimSection(header, i18nKey, items) {
@@ -307,7 +400,28 @@ function buildDimSection(header, i18nKey, items) {
 
 function listToHtml(arr) {
   if (!arr || arr.length === 0) return '—';
-  return '<ul>' + arr.map(s => `<li>${escapeHtml(s)}</li>`).join('') + '</ul>';
+  return '<ul>' + arr.map(s => {
+    // 纯字符串
+    if (typeof s === 'string') return `<li>${escapeHtml(s)}</li>`;
+    // AI 可能返回对象如 {"key": "value"}，提取 value
+    if (typeof s === 'object' && s !== null) {
+      const val = Object.values(s)[0];
+      return `<li>${escapeHtml(String(val || ''))}</li>`;
+    }
+    return `<li>${escapeHtml(String(s))}</li>`;
+  }).join('') + '</ul>';
+}
+
+/**
+ * 安全取值：优先取指定 key，如果缺失则取对象第一个字符串值
+ */
+function safeStr(obj, key) {
+  if (!obj) return '—';
+  if (obj[key] && typeof obj[key] === 'string') return escapeHtml(obj[key]);
+  // 回退：某些 AI 返回把中文描述当 key
+  const vals = Object.values(obj);
+  const first = vals.find(v => typeof v === 'string' && v.length > 0);
+  return first ? escapeHtml(first) : '—';
 }
 
 function escapeHtml(text) {
@@ -348,20 +462,28 @@ async function loadHistory() {
 
 function renderHistoryList(items) {
   const container = document.getElementById('historyList');
+  const toolbar = document.getElementById('historyToolbar');
   if (!container) return;
 
   if (items.length === 0) {
     container.innerHTML = `<div class="empty-state"><div class="icon">📭</div><div data-i18n="noHistory">暂无分析记录</div></div>`;
+    if (toolbar) toolbar.style.display = 'none';
     updatePageLanguage();
     return;
   }
 
+  if (toolbar) toolbar.style.display = 'flex';
+  document.getElementById('selectAllCheck').checked = false;
+
   container.innerHTML = items.map(item => `
-    <div class="history-item" onclick="loadHistoryDetail('${item.record_id}')">
-      <div class="preview">${escapeHtml(item.transcript_preview)}</div>
-      <div class="meta">
-        <span>${item.created_at || ''}</span>
-        <span>${item.has_image ? '🖼️' : '📝'}</span>
+    <div class="history-item">
+      <input type="checkbox" value="${item.record_id}" onchange="onHistoryCheck()" onclick="event.stopPropagation()">
+      <div class="item-body" onclick="loadHistoryDetail('${item.record_id}')">
+        <div class="preview">${escapeHtml(item.transcript_preview) || '(空)'}</div>
+        <div class="meta">
+          <span>${item.created_at || ''}</span>
+          <span>${item.has_image ? '🖼️' : '📝'}</span>
+        </div>
       </div>
     </div>
   `).join('');
@@ -391,6 +513,80 @@ async function loadHistoryDetail(recordId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// 历史记录管理（选择/批量删除/全部清除）
+// ═══════════════════════════════════════════════════════════════
+
+function getSelectedIds() {
+  const checks = document.querySelectorAll('#historyList input[type="checkbox"]:checked');
+  return Array.from(checks).map(c => c.value);
+}
+
+function onHistoryCheck() {
+  const all = document.querySelectorAll('#historyList input[type="checkbox"]');
+  const checked = document.querySelectorAll('#historyList input[type="checkbox"]:checked');
+  document.getElementById('selectAllCheck').checked = all.length > 0 && checked.length === all.length;
+}
+
+function toggleSelectAll() {
+  const master = document.getElementById('selectAllCheck');
+  document.querySelectorAll('#historyList input[type="checkbox"]').forEach(c => {
+    c.checked = master.checked;
+  });
+}
+
+async function deleteSelectedHistory() {
+  const ids = getSelectedIds();
+  if (ids.length === 0) {
+    alert(t('noSelection'));
+    return;
+  }
+  if (!confirm(`确定删除选中的 ${ids.length} 条记录？`)) return;
+
+  try {
+    const r = await fetch(`/api/history?ids=${ids.join(',')}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + state.token },
+    });
+    const data = await r.json();
+    if (data.success) {
+      clearResultState();
+      loadHistory();
+    }
+  } catch (err) {
+    alert(t('errNetwork'));
+  }
+}
+
+async function clearAllHistory() {
+  if (!confirm(t('confirmClearAll'))) return;
+
+  try {
+    const r = await fetch('/api/history/all', {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + state.token },
+    });
+    const data = await r.json();
+    if (data.success) {
+      clearResultState();
+      loadHistory();
+    }
+  } catch (err) {
+    alert(t('errNetwork'));
+  }
+}
+
+function clearResultState() {
+  document.getElementById('resultContainer').style.display = 'none';
+  document.getElementById('resultContainer').innerHTML = '';
+  document.getElementById('progressContainer').style.display = 'none';
+  document.getElementById('analyzeBtn').style.display = 'block';
+  document.getElementById('analyzeBtn').disabled = false;
+  document.getElementById('loadingSpinner').style.display = 'none';
+  state.currentAnalysis = null;
+  state.currentDetail = null;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // 翻译功能
 // ═══════════════════════════════════════════════════════════════
 
@@ -399,6 +595,17 @@ function switchTranslateDir(dir) {
   document.querySelectorAll('.direction-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.dir === dir);
   });
+  // 切换方向时清除旧结果
+  clearTranslate();
+}
+
+function clearTranslate() {
+  speechSynthesis.cancel();
+  document.getElementById('translateInput').value = '';
+  document.getElementById('translateOutput').style.display = 'none';
+  document.getElementById('translateResultLabel').style.display = 'none';
+  document.getElementById('copyResultBtn').style.display = 'none';
+  document.getElementById('speakBtn').style.display = 'none';
 }
 
 async function doTranslate() {
@@ -412,9 +619,12 @@ async function doTranslate() {
   const spinner = document.getElementById('translateSpinner');
   btn.style.display = 'none';
   spinner.style.display = 'block';
+  speechSynthesis.cancel();
+  // 隐藏上次翻译结果
   document.getElementById('translateOutput').style.display = 'none';
   document.getElementById('translateResultLabel').style.display = 'none';
   document.getElementById('copyResultBtn').style.display = 'none';
+  document.getElementById('speakBtn').style.display = 'none';
 
   try {
     const r = await fetch('/api/translate', {
@@ -436,6 +646,7 @@ async function doTranslate() {
       document.getElementById('translateOutput').style.display = 'block';
       document.getElementById('translateResultLabel').style.display = 'block';
       document.getElementById('copyResultBtn').style.display = 'block';
+      document.getElementById('speakBtn').style.display = 'block';
     } else {
       alert(data.detail || data.message || t('errTranslate'));
     }
@@ -460,6 +671,39 @@ function copyTranslateResult() {
     document.execCommand('copy');
     alert('译文已复制！');
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 语音朗读翻译结果
+// ═══════════════════════════════════════════════════════════════
+
+function speakTranslation() {
+  const text = document.getElementById('translateOutput').textContent;
+  if (!text) return;
+
+  // 停止正在播放的语音
+  speechSynthesis.cancel();
+
+  const utter = new SpeechSynthesisUtterance(text);
+  // 根据翻译方向选择语言：中→泰说泰语，泰→中说中文
+  utter.lang = state.translateDirection === 'zh2th' ? 'th-TH' : 'zh-CN';
+  utter.rate = 0.9; // 稍慢一点更清晰
+
+  // 等待浏览器加载对应语音
+  const setVoice = () => {
+    const voices = speechSynthesis.getVoices();
+    const match = voices.find(v => v.lang.startsWith(utter.lang));
+    if (match) utter.voice = match;
+    speechSynthesis.speak(utter);
+  };
+
+  if (speechSynthesis.getVoices().length) {
+    setVoice();
+  } else {
+    speechSynthesis.onvoiceschanged = () => {
+      setVoice();
+    };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

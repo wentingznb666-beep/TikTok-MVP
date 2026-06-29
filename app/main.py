@@ -20,9 +20,12 @@ from app.routers.analyze import router as analyze_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用启动/关闭时的初始化与清理"""
-    # 启动：初始化数据库连接 + 确保上传目录存在
+    # 启动：初始化数据库 + 上传目录 + 预加载 Whisper
     await get_db()
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+    # 后台预加载 Whisper 模型，避免首次上传视频时等待
+    from app.services.video_service import preload_whisper
+    preload_whisper()
     print(f"🚀 {APP_TITLE} v{APP_VERSION} 已启动")
     yield
     # 关闭：清理数据库连接
